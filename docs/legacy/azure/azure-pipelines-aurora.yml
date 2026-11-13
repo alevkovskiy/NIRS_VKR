@@ -1,0 +1,31 @@
+# Separate pipeline, started from the portal through the Azure REST API.
+# Configure pipeline variables AURORA_TARGET, AURORA_WORKSPACE and SFDK_BIN.
+# Agent requires a configured Aurora SDK, Node.js and access to the SDK build engine.
+trigger: none
+pr: none
+
+parameters:
+  - name: agentPool
+    type: string
+    default: AuroraSDK
+
+pool:
+  name: ${{ parameters.agentPool }}
+
+steps:
+  - checkout: self
+    clean: true
+  - bash: node aurora_client/tests/contract.test.cjs
+    displayName: Check client API contract
+  - bash: bash scripts/build-aurora.sh
+    displayName: Build and validate Aurora RPM
+    env:
+      AURORA_TARGET: $(AURORA_TARGET)
+      AURORA_WORKSPACE: $(AURORA_WORKSPACE)
+      SFDK_BIN: $(SFDK_BIN)
+      ARTIFACT_DIR: $(Build.ArtifactStagingDirectory)/rpm
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: $(Build.ArtifactStagingDirectory)/rpm
+      artifact: aurora-rpm
+    displayName: Publish client RPM

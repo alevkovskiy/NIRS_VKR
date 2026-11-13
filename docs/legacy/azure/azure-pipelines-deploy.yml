@@ -1,0 +1,48 @@
+# Optional manual CD. Configure the three variables below and a restricted SSH
+# service connection before activating. This file does not create a server.
+trigger: none
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - bash: |
+      set -eu
+      [[ "$CI_DEFINITION" =~ ^[0-9]+$ ]] && [[ "$CI_RUN" =~ ^[0-9]+$ ]]
+    displayName: Validate selected CI build
+    env:
+      CI_DEFINITION: $(PORTAL_CI_PIPELINE_ID)
+      CI_RUN: $(PORTAL_CI_RUN_ID)
+  - task: DownloadPipelineArtifact@2
+    inputs:
+      buildType: specific
+      project: $(System.TeamProject)
+      definition: $(PORTAL_CI_PIPELINE_ID)
+      buildVersionToDownload: specific
+      pipelineId: $(PORTAL_CI_RUN_ID)
+      artifactName: portal-image
+      targetPath: $(Pipeline.Workspace)/release
+  - bash: |
+      set -eu
+      mkdir -p "$(Pipeline.Workspace)/release/scripts"
+      cp compose.production.yaml "$(Pipeline.Workspace)/release/"
+      cp scripts/deploy.sh "$(Pipeline.Workspace)/release/scripts/"
+    displayName: Prepare release bundle
+  - task: CopyFilesOverSSH@0
+    inputs:
+      sshEndpoint: $(DEPLOY_SSH_CONNECTION)
+      sourceFolder: $(Pipeline.Workspace)/release
+      contents: '**'
+      targetFolder: /opt/nirs-portal/releases/$(Build.BuildId)
+    displayName: Copy release to prepared server
+  - task: SSH@0
+    inputs:
+      sshEndpoint: $(DEPLOY_SSH_CONNECTION)
+      runOptions: inline
+      inline: |
+        set -eu
+        cd /opt/nirs-portal/releases/$(Build.BuildId)
+        PORTAL_IMAGE=nirs-portal:$(PORTAL_CI_RUN_ID) bash scripts/deploy.sh ./nirs-portal.tar /opt/nirs-portal/.env
+      failOnStdErr: false
+    displayName: Back up, migrate and start portal

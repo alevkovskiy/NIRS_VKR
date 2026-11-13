@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+X-Nemo-Application-Type=silica-qt5
+Icon=ru.nirs.Client
+Exec=/usr/bin/ru.nirs.Client
+Name=NIRS
+Name[ru]=НИРС
+
+[X-Application]
+Permissions=Internet
+OrganizationName=ru.nirs
+ApplicationName=Client
+ExecDBus=/usr/bin/ru.nirs.Client

@@ -1,0 +1,64 @@
+# CI for the portal. The Aurora SDK build belongs in a separate pipeline.
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+resources:
+  containers:
+    - container: postgres
+      image: postgres:17
+      env:
+        POSTGRES_USER: nirs_test
+        POSTGRES_PASSWORD: ci_only_password
+        POSTGRES_DB: nirs_test
+      ports:
+        - 5432:5432
+      options: >-
+        --health-cmd="pg_isready -U nirs_test -d nirs_test"
+        --health-interval=3s --health-timeout=3s --health-retries=20
+
+services:
+  postgres: postgres
+
+variables:
+  DATABASE_URL: postgresql+psycopg://nirs_test:ci_only_password@127.0.0.1:5432/nirs_test
+
+steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.14'
+    displayName: Use Python 3.14
+  - script: |
+      python -m pip install uv==0.13.5
+      uv sync --locked
+    displayName: Install locked dependencies
+  - script: |
+      set -eu
+      uv run --no-sync alembic upgrade head
+      uv run --no-sync alembic check
+      uv run --no-sync alembic downgrade base
+      uv run --no-sync alembic upgrade head
+    displayName: Check migrations on disposable PostgreSQL
+    env:
+      DATABASE_URL: $(DATABASE_URL)
+  - script: |
+      set -eu
+      uv run --no-sync ruff check config.py database.py security.py manage.py models schemas main.py routers services crud migrations tests
+      uv run --no-sync pytest -q
+      node aurora_client/tests/contract.test.cjs
+    displayName: Check code and database integration
+    env:
+      DATABASE_URL: $(DATABASE_URL)
+      TEST_DATABASE_URL: $(DATABASE_URL)
+  - script: |
+      set -eu
+      docker build -t nirs-portal:$(Build.BuildId) .
+      docker save nirs-portal:$(Build.BuildId) -o "$(Build.ArtifactStagingDirectory)/nirs-portal.tar"
+    displayName: Build deployable portal image
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: $(Build.ArtifactStagingDirectory)/nirs-portal.tar
+      artifact: portal-image
+    displayName: Publish portal image

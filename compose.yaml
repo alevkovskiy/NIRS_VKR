@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Create .env first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Create .env first}
+      POSTGRES_DB: ${POSTGRES_DB:?Create .env first}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      OLLAMA_URL: ${DOCKER_OLLAMA_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-90}
+      GH_OWNER: ${GH_OWNER:-alevkovskiy}
+      GH_REPO: ${GH_REPO:-NIRS_VKR}
+      GH_ACTIONS_TOKEN: ${GH_ACTIONS_TOKEN:-}
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+volumes:
+  postgres_data:

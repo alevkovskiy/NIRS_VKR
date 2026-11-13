@@ -1,0 +1,36 @@
+name: Aurora client RPM
+run-name: ${{ inputs.portal_request_id && format('NIRS {0}', inputs.portal_request_id) || 'Aurora client RPM' }}
+on:
+  workflow_dispatch:
+    inputs:
+      portal_request_id:
+        description: Portal request ID
+        required: false
+        type: string
+        default: ''
+permissions:
+  contents: read
+jobs:
+  rpm:
+    runs-on: [self-hosted, linux, x64, aurora-sdk]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check client contract
+        run: node aurora_client/tests/contract.test.cjs
+      - name: Build and validate RPM
+        run: bash scripts/build-aurora.sh
+        env:
+          AURORA_TARGET: ${{ vars.AURORA_TARGET }}
+          AURORA_WORKSPACE: ${{ vars.AURORA_WORKSPACE }}
+          SFDK_BIN: ${{ vars.SFDK_BIN }}
+          ARTIFACT_DIR: ${{ github.workspace }}/artifacts/rpm
+      - name: Publish RPM
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurora-rpm
+          path: artifacts/rpm/*.rpm
+          if-no-files-found: error
+          retention-days: 3
