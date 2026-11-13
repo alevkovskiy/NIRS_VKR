@@ -20,7 +20,8 @@ def log_excerpt(text: str) -> str:
         line
         for line in text.splitlines()
         if re.search(
-            r"\b\d+ passed\b|\b\d+ failed\b|contract test groups passed|All checks passed!",
+            r"\b\d+ passed\b|\b\d+ failed\b|"
+            r"contract test groups passed|All checks passed!",
             line,
         )
     ]
