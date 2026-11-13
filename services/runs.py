@@ -97,8 +97,14 @@ def sync_run(db: Session, run: Run, github: GitHubClient) -> Run:
         )
         run.commit_sha = build.get("head_sha")
         run.started_at = parsed_date(build.get("run_started_at"))
+        # updated_at also changes after completion, so it is not a finish time.
+        completions = [
+            parsed_date(job.get("completed_at"))
+            for job in records
+            if job.get("completed_at")
+        ]
         run.finished_at = (
-            parsed_date(build.get("updated_at")) if status == "completed" else None
+            max(completions) if status == "completed" and completions else None
         )
     for record in records:
         job_id = record.get("id")

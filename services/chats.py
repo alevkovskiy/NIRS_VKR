@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -10,6 +11,27 @@ from models import Chat, Job, Message
 from services.github import get_github
 from services.ollama import OllamaClient
 from services.runs import scrub_log, serialize_run
+
+
+def log_excerpt(text: str) -> str:
+    # Database service shutdown logs may follow the actual test summary.
+    # Preserve the summary as evidence instead of feeding only the final errors.
+    summaries = [
+        line
+        for line in text.splitlines()
+        if re.search(
+            r"\b\d+ passed\b|\b\d+ failed\b|"
+            r"contract test groups passed|All checks passed!",
+            line,
+        )
+    ]
+    evidence = "\n".join(summaries[-8:])[-800:]
+    return (
+        "Итоги автоматических проверок:\n"
+        + (evidence or "Не найдены в фрагменте")
+        + "\nПоследние строки общего журнала, включая служебные сообщения:\n"
+        + text[-1600:]
+    )
 
 
 def run_context(db: Session, run_id: int, user_id: int) -> str:
@@ -29,9 +51,8 @@ def run_context(db: Session, run_id: int, user_id: int) -> str:
     if external_id and logs:
         github = get_github()
         for name, log_id in logs:
-            context += (
-                f"\nЖурнал {name}:\n"
-                + scrub_log(github.log(external_id, log_id))[-1600:]
+            context += f"\nЖурнал {name}:\n" + log_excerpt(
+                scrub_log(github.log(external_id, log_id))
             )
     return context[:6000]
 
