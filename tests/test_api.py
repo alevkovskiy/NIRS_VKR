@@ -150,7 +150,7 @@ class FakeGitHub:
             "conclusion": "failure",
             "head_sha": "abc123",
             "run_started_at": "2026-11-13T10:00:00Z",
-            "updated_at": "2026-11-13T10:01:00Z",
+            "updated_at": "2026-11-13T10:10:00Z",
         }
 
     def jobs(self, run_id):
@@ -158,6 +158,8 @@ class FakeGitHub:
             {
                 "id": 5,
                 "name": "Compile",
+                "started_at": "2026-11-13T10:00:00Z",
+                "completed_at": "2026-11-13T10:01:00Z",
                 "status": "completed",
                 "conclusion": "failure",
             }
@@ -205,6 +207,7 @@ def test_build_lifecycle_ownership_logs_artifact_and_analysis(
     data = client.get(f"/api/runs/{run_id}", headers=headers).json()
     assert data["status"] == "completed" and data["result"] == "failed"
     assert data["commit_sha"] == "abc123"
+    assert data["finished_at"] == "2026-11-13T10:01:00Z"
     job_id = data["jobs"][0]["id"]
     artifact_id = data["artifacts"][0]["id"]
     # Repeated polling updates records rather than inserting duplicate jobs/artifacts.
