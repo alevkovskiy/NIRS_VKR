@@ -154,3 +154,16 @@ def test_ollama_timeout_releases_generation_slot(monkeypatch):
         with pytest.raises(HTTPException) as exc:
             OllamaClient().generate([{"role": "user", "content": "hello"}])
         assert exc.value.status_code == 504
+
+
+def test_analysis_keeps_test_summary_before_database_shutdown_errors():
+    from services.chats import log_excerpt
+
+    log = "19 passed, 1 warning\n8 contract test groups passed\n"
+    log += "normal build output\n" * 300
+    log += "ERROR: violates foreign key constraint (negative database test)"
+    excerpt = log_excerpt(log)
+    assert "19 passed" in excerpt
+    assert "8 contract test groups passed" in excerpt
+    assert "ERROR: violates foreign key" in excerpt
+    assert len(excerpt) < 3000
