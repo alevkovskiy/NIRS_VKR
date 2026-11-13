@@ -8,3 +8,20 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Local configuration and test caches
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# Generated build packages
+artifacts/
+
+# Downloaded SDK installers
+/sdk/
+
+# Local editor settings
+.vscode/

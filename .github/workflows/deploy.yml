@@ -1,0 +1,29 @@
+name: Deploy portal
+# Optional deployment on an existing server; no cloud subscription is created.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: portal-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    # Register a trusted server with these labels before using this workflow.
+    runs-on: [self-hosted, linux, x64, nirs-deploy]
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build release
+        run: |
+          docker build -t "$PORTAL_IMAGE" .
+          docker save "$PORTAL_IMAGE" -o "$RUNNER_TEMP/nirs-portal.tar"
+        env:
+          PORTAL_IMAGE: nirs-portal:${{ github.sha }}
+      - name: Back up and deploy
+        run: bash scripts/deploy.sh "$RUNNER_TEMP/nirs-portal.tar" /opt/nirs-portal/.env
+        env:
+          PORTAL_IMAGE: nirs-portal:${{ github.sha }}

@@ -1,0 +1,160 @@
+from collections.abc import Iterator
+from urllib.parse import quote, urlparse
+
+import httpx
+from fastapi import HTTPException
+
+from config import get_settings
+
+MAX_LOG_BYTES = 2 * 1024 * 1024
+
+
+class AzureSubmissionUnknown(Exception):
+    """Azure may have accepted a POST. Never repeat it automatically."""
+
+
+class AzureClient:
+    def __init__(self):
+        settings = get_settings()
+        if not settings.azure_configured:
+            raise HTTPException(503, "Azure DevOps ещё не настроен на сервере.")
+        organization = quote(settings.azure_organization, safe="")
+        project = quote(settings.azure_project, safe="")
+        self.base = f"https://dev.azure.com/{organization}/{project}/_apis/"
+        self.auth = httpx.BasicAuth("", settings.azure_pat.get_secret_value())
+
+    def request(self, method: str, path: str, **kwargs) -> dict:
+        try:
+            with httpx.Client(timeout=30, trust_env=False) as client:
+                response = client.request(
+                    method,
+                    self.base + path,
+                    auth=self.auth,
+                    params={"api-version": "7.1"},
+                    **kwargs,
+                )
+                if response.status_code >= 500 and method == "POST":
+                    raise AzureSubmissionUnknown()
+                if response.status_code in (401, 403):
+                    raise HTTPException(
+                        502, "Azure отклонил доступ. Проверьте PAT и права Build."
+                    )
+                if response.status_code == 404:
+                    raise HTTPException(
+                        502, "Проект, пайплайн или запуск не найден в Azure."
+                    )
+                if response.is_error:
+                    raise HTTPException(
+                        502, "Azure отклонил запрос. Проверьте настройки пайплайна."
+                    )
+                data = response.json()
+                if not isinstance(data, dict):
+                    raise ValueError("Expected object")
+                return data
+        except (httpx.TransportError, ValueError) as exc:
+            if method == "POST":
+                raise AzureSubmissionUnknown() from exc
+            raise HTTPException(
+                502, "Не удалось получить данные Azure DevOps."
+            ) from exc
+
+    def start(self, pipeline_id: int, branch: str) -> dict:
+        data = self.request(
+            "POST",
+            f"pipelines/{pipeline_id}/runs",
+            json={
+                "resources": {
+                    "repositories": {
+                        "self": {
+                            "refName": branch
+                            if branch.startswith("refs/heads/")
+                            else f"refs/heads/{branch}"
+                        }
+                    }
+                }
+            },
+        )
+        if not isinstance(data.get("id"), int):
+            raise AzureSubmissionUnknown()
+        return data
+
+    def build(self, run_id: int) -> dict:
+        return self.request("GET", f"build/builds/{run_id}")
+
+    def timeline(self, run_id: int) -> list[dict]:
+        data = self.request("GET", f"build/builds/{run_id}/timeline")
+        return data.get("records", [])
+
+    def artifacts(self, run_id: int) -> list[dict]:
+        data = self.request("GET", f"build/builds/{run_id}/artifacts")
+        return data.get("value", [])
+
+    def log(self, run_id: int, log_id: int) -> str:
+        try:
+            with httpx.Client(timeout=8, trust_env=False) as client:
+                with client.stream(
+                    "GET",
+                    self.base + f"build/builds/{run_id}/logs/{log_id}",
+                    auth=self.auth,
+                    params={"api-version": "7.1"},
+                    headers={"Accept": "text/plain"},
+                ) as response:
+                    response.raise_for_status()
+                    data = bytearray()
+                    for chunk in response.iter_bytes():
+                        data.extend(chunk[: MAX_LOG_BYTES - len(data)])
+                        if len(data) >= MAX_LOG_BYTES:
+                            return (
+                                data.decode("utf-8", errors="replace")
+                                + "\n[Журнал обрезан до 2 МБ]"
+                            )
+                    return data.decode("utf-8", errors="replace")
+        except httpx.HTTPError as exc:
+            raise HTTPException(502, "Не удалось загрузить журнал Azure.") from exc
+
+    def download(self, run_id: int, name: str) -> Iterator[bytes]:
+        # Azure may redirect to signed blob storage. Never forward PAT there.
+        path = self.base + f"build/builds/{run_id}/artifacts"
+        params = {"api-version": "7.1", "artifactName": name, "$format": "zip"}
+        with httpx.Client(timeout=60, trust_env=False) as client:
+            for _ in range(6):
+                parsed = urlparse(path)
+                host = parsed.hostname or ""
+                trusted = (
+                    host == "dev.azure.com"
+                    or host.endswith(".visualstudio.com")
+                    or host.endswith(".blob.core.windows.net")
+                    or host.endswith(".vsassets.io")
+                )
+                if parsed.scheme != "https" or not trusted or parsed.username:
+                    raise HTTPException(
+                        502, "Azure вернул недопустимый адрес артефакта."
+                    )
+                auth = self.auth if path.startswith(self.base) else None
+                with client.stream("GET", path, params=params, auth=auth) as response:
+                    if response.is_redirect:
+                        path = str(response.url.join(response.headers["location"]))
+                        params = None
+                        continue
+                    response.raise_for_status()
+                    media_type = response.headers.get("content-type", "").split(";")[0]
+                    if media_type not in (
+                        "application/zip",
+                        "application/octet-stream",
+                        "application/x-zip-compressed",
+                    ):
+                        raise HTTPException(
+                            502, "Azure вернул ответ вместо ZIP-архива."
+                        )
+                    total = 0
+                    for chunk in response.iter_bytes():
+                        total += len(chunk)
+                        if total > 256 * 1024 * 1024:
+                            raise HTTPException(502, "Артефакт превышает лимит 256 МБ.")
+                        yield chunk
+                    return
+            raise HTTPException(502, "Слишком много перенаправлений Azure.")
+
+
+def get_azure() -> AzureClient:
+    return AzureClient()

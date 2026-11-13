@@ -1,0 +1,14 @@
+.git
+.venv
+.env
+.env.*
+!.env.example
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.vscode
+aurora_client
+
+# Downloaded SDK installers
+sdk/

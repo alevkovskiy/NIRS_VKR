@@ -1,0 +1,47 @@
+# Intended for a dedicated server behind an HTTPS reverse proxy.
+# No source code or credentials are baked into the release image.
+x-app: &app
+  image: ${PORTAL_IMAGE:?Set PORTAL_IMAGE to the CI image tag}
+  environment:
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    OLLAMA_URL: ${OLLAMA_URL:?Set a model address reachable from this server}
+    OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
+    GH_OWNER: ${GH_OWNER:-alevkovskiy}
+    GH_REPO: ${GH_REPO:-NIRS_VKR}
+    GH_ACTIONS_TOKEN: ${GH_ACTIONS_TOKEN:-}
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  migrate:
+    <<: *app
+    profiles: [tools]
+    command: [alembic, upgrade, head]
+  app:
+    <<: *app
+    ports:
+      - '127.0.0.1:${APP_PORT:-8000}:8000'
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+volumes:
+  postgres_data:
