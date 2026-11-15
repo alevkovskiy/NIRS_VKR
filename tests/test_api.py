@@ -175,6 +175,79 @@ class FakeGitHub:
         yield b"PK-test-archive"
 
 
+def test_run_waits_for_github_request_title_before_accepting_jobs(
+    client, session, monkeypatch
+):
+    headers = account(client)
+    pipeline = Pipeline(name="Portal", workflow_file="portal.yml")
+    session.add(pipeline)
+    session.commit()
+    fake = FakeGitHub()
+    original = fake.build
+    monkeypatch.setattr("routers.pipelines.get_github", lambda: fake)
+    monkeypatch.setattr("routers.runs.get_github", lambda: fake)
+    run_id = client.post(
+        f"/pipelines/{pipeline.id}/start", headers=headers, json={}
+    ).json()["id"]
+    monkeypatch.setattr(
+        fake,
+        "build",
+        lambda run_id: dict(
+            original(run_id),
+            name="Portal CI",
+            display_title="Portal CI",
+            status="queued",
+            conclusion=None,
+        ),
+    )
+    response = client.get(f"/api/runs/{run_id}/status", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["status"] == "queued"
+    assert response.json()["jobs"] == []
+    assert response.json()["artifacts"] == []
+    monkeypatch.setattr(fake, "build", original)
+    response = client.get(f"/api/runs/{run_id}/status", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    assert len(response.json()["jobs"]) == 1
+
+
+@pytest.mark.parametrize(
+    "title,status,age",
+    [
+        ("NIRS another-request", "queued", 0),
+        ("Portal CI", "queued", 120),
+        ("Portal CI", "completed", 0),
+    ],
+)
+def test_run_rejects_wrong_or_unresolved_github_request_title(
+    client, session, monkeypatch, title, status, age
+):
+    headers = account(client)
+    pipeline = Pipeline(name="Portal", workflow_file="portal.yml")
+    session.add(pipeline)
+    session.commit()
+    fake = FakeGitHub()
+    original = fake.build
+    monkeypatch.setattr("routers.pipelines.get_github", lambda: fake)
+    monkeypatch.setattr("routers.runs.get_github", lambda: fake)
+    run_id = client.post(
+        f"/pipelines/{pipeline.id}/start", headers=headers, json={}
+    ).json()["id"]
+    run = session.get(Run, run_id)
+    run.created_at = datetime.now(UTC) - timedelta(seconds=age)
+    session.commit()
+    monkeypatch.setattr(
+        fake,
+        "build",
+        lambda run_id: dict(
+            original(run_id), name="Portal CI", display_title=title, status=status
+        ),
+    )
+    assert client.get(f"/api/runs/{run_id}/status", headers=headers).status_code == 502
+    assert list(session.scalars(select(Job).where(Job.run_id == run_id))) == []
+
+
 def test_build_lifecycle_ownership_logs_artifact_and_analysis(
     client, session, monkeypatch
 ):
