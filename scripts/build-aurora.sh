@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run on a Linux self-hosted Azure agent with Aurora SDK already configured.
+# Run on a Linux self-hosted runner with Aurora SDK already configured.
 set -euo pipefail
 : "${AURORA_TARGET:?Set the installed target from sfdk tools list}"
 : "${AURORA_WORKSPACE:?Set the workspace selected when installing Aurora SDK}"

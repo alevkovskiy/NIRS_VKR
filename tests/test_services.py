@@ -56,6 +56,39 @@ def test_dispatch_supports_current_and_legacy_responses(monkeypatch, github_sett
     assert GitHubClient().start("portal.yml", "main", "b")["id"] is None
 
 
+@pytest.mark.parametrize("failure", ["timeout", "server_error"])
+def test_github_read_recovers_from_transient_failure(
+    monkeypatch, github_settings, failure
+):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if len(calls) == 1:
+            if failure == "timeout":
+                raise httpx.ReadTimeout("timeout", request=request)
+            return httpx.Response(503)
+        return httpx.Response(200, json={"id": 12, "status": "completed"})
+
+    transport(monkeypatch, handler)
+    assert GitHubClient().build(12)["status"] == "completed"
+    assert len(calls) == 2
+
+
+def test_github_read_retries_are_bounded(monkeypatch, github_settings):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        raise httpx.ReadTimeout("timeout", request=request)
+
+    transport(monkeypatch, handler)
+    with pytest.raises(HTTPException) as error:
+        GitHubClient().build(12)
+    assert error.value.status_code == 502
+    assert len(calls) == 2
+
+
 def test_discovery_matches_exact_request_id(monkeypatch, github_settings):
     transport(
         monkeypatch,

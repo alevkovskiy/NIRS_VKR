@@ -49,11 +49,13 @@ docker compose up -d --wait
 - Защита веб-запуска от повторов через `Idempotency-Key`.
 - Миграции Alembic, Docker, тесты на PostgreSQL, CI портала и pipeline клиента Авроры.
 
-Реальный запрос к Ollama проверен локально. GitHub-интеграция проверена тестами
-с подменой HTTP-ответов и ответов сервиса. Реальная сборка RPM ещё не проверена:
-пока не установлен и не зарегистрирован Linux x86_64-исполнитель с Aurora SDK.
-Офлайн-установщик 5.1.2.10 скачан в `sdk/` и проверен по контрольной сумме;
-скачанный файл ещё не означает установленный SDK.
+Реальный чат с Ollama, запуск GitHub Actions и получение результатов проверены.
+ARM64 RPM собран, подписан тестовым сертификатом SDK и проверен через Aurora BT
+на Mac. Клиент установлен в эмуляторе Авроры 5.2.1; вход и загрузка данных
+подтверждены. Сетевой сценарий чата проверен автоматически из гостевой Авроры.
+Полная проверка интерфейса отложена. Workflow RPM использует стандартный
+ARM64 runner GitHub, собственный исполнитель с SDK не нужен.
+Сценарий защиты: [docs/DEMO.md](docs/DEMO.md).
 
 ## Настройки
 
@@ -71,7 +73,7 @@ docker compose up -d --wait
 | `DOCKER_OLLAMA_URL` | Адрес Ollama из контейнера: `http://host.docker.internal:11434` |
 | `OLLAMA_MODEL` | `qwen3.5:9b` |
 | `OLLAMA_TIMEOUT` | Ожидание ответа, по умолчанию 90 секунд |
-| `GH_OWNER`, `GH_REPO`, `GH_ACTIONS_TOKEN` | Доступ к GitHub, пока пустые |
+| `GH_OWNER`, `GH_REPO`, `GH_ACTIONS_TOKEN` | Доступ сайта к GitHub Actions |
 
 При смене порта PostgreSQL измените и `DATABASE_URL`. Для Compose используйте
 локальный пароль из букв и цифр: специальные символы в URL требуют кодирования.
@@ -140,8 +142,9 @@ node aurora_client/tests/contract.test.cjs
 
 - `.github/workflows/portal.yml` — CI портала: миграции, тесты, контракт клиента,
   сборка Docker-образа и публикация небольшого отчёта тестов.
-- `.github/workflows/aurora.yml` — отдельная сборка и валидация RPM на агенте с SDK.
-- `scripts/build-aurora.sh` — команда сборки для установленного Aurora SDK.
+- `.github/workflows/aurora.yml` — сборка и валидация ARM64 RPM через Aurora BT
+  на стандартном `ubuntu-24.04-arm` GitHub.
+- `scripts/build-aurora-bt.sh` — та же сборка локально на Mac или Linux.
 - `.github/workflows/deploy.yml`, `compose.production.yaml`, `scripts/deploy.sh` —
   шаблон ручной доставки на подготовленный сервер с резервной копией базы.
 
@@ -159,4 +162,5 @@ GitHub к помощнику не передаёт этот токен веб-п
 Виртуальная машина или устройство не увидят Mac по своему `localhost`.
 Для подключения устройства потребуется доступный ему адрес и отдельная настройка
 прослушивания сервера; наружу PostgreSQL и Ollama публиковать не требуется.
-Сборку, установку и C++-проверки нужно выполнить в SDK, см. `aurora_client/README.md`.
+Для эмулятора Mac доступен адрес `http://10.0.2.2:8000`. Инструкции сборки,
+установки и C++-проверок: [aurora_client/README.md](aurora_client/README.md).

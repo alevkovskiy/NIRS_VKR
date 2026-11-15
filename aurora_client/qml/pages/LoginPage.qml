@@ -55,6 +55,12 @@ Page {
                 onClicked: { page.registration = !page.registration; page.localNotice = ""; action.error = ""; confirm.text = ""; password.text = "" }
             }
             Notice { text: "Сервер: " + Api.baseUrl }
+            Button {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Настроить сервер"
+                enabled: !action.busy
+                onClicked: pageStack.push(Qt.resolvedUrl("SettingsPage.qml"))
+            }
         }
         VerticalScrollDecorator {}
     }
