@@ -61,7 +61,8 @@ jobs:
           node aurora_client/tests/contract.test.cjs
           node --check static/js/app.js
           node --check static/js/api.js
-          bash -n scripts/build-aurora.sh scripts/deploy.sh
+          bash -n scripts/build-aurora.sh scripts/build-aurora-bt.sh scripts/deploy.sh
+          python -m py_compile scripts/check-aurora-live.py
       - name: Build portal image
         run: docker build -t nirs-portal:${{ github.sha }} .
       - name: Publish test report

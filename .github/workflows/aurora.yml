@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   rpm:
-    runs-on: [self-hosted, linux, x64, aurora-sdk]
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -21,11 +21,9 @@ jobs:
       - name: Check client contract
         run: node aurora_client/tests/contract.test.cjs
       - name: Build and validate RPM
-        run: bash scripts/build-aurora.sh
+        run: bash scripts/build-aurora-bt.sh
         env:
-          AURORA_TARGET: ${{ vars.AURORA_TARGET }}
-          AURORA_WORKSPACE: ${{ vars.AURORA_WORKSPACE }}
-          SFDK_BIN: ${{ vars.SFDK_BIN }}
+          AURORA_ARCH: arm64
           ARTIFACT_DIR: ${{ github.workspace }}/artifacts/rpm
       - name: Publish RPM
         uses: actions/upload-artifact@v4
@@ -33,4 +31,12 @@ jobs:
           name: aurora-rpm
           path: artifacts/rpm/*.rpm
           if-no-files-found: error
+          retention-days: 3
+      - name: Publish build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurora-build-log
+          path: artifacts/rpm/build.log
+          if-no-files-found: ignore
           retention-days: 3

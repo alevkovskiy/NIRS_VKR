@@ -12,3 +12,5 @@ aurora_client
 
 # Downloaded SDK installers
 sdk/
+artifacts/
+.auroraos-*-keys/

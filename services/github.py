@@ -1,5 +1,6 @@
 import re
 from collections.abc import Iterator
+from time import sleep
 from urllib.parse import quote, urlparse
 
 import httpx
@@ -37,9 +38,21 @@ class GitHubClient:
     def request(self, method: str, path: str, **kwargs) -> dict:
         try:
             with httpx.Client(timeout=15, trust_env=False) as client:
-                response = client.request(
-                    method, self.base + path, headers=self.headers, **kwargs
-                )
+                attempts = 2 if method == "GET" else 1
+                for attempt in range(attempts):
+                    if attempt:
+                        sleep(0.25)
+                    try:
+                        response = client.request(
+                            method, self.base + path, headers=self.headers, **kwargs
+                        )
+                    except httpx.TransportError:
+                        if attempt + 1 < attempts:
+                            continue
+                        raise
+                    if response.status_code >= 500 and attempt + 1 < attempts:
+                        continue
+                    break
                 if response.status_code >= 500 and method == "POST":
                     raise SubmissionUnknown()
                 if response.status_code in (401, 403):
