@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -70,6 +70,17 @@ def sync_run(db: Session, run: Run, github: GitHubClient) -> Run:
     if build.get("head_branch") != branch.removeprefix("refs/heads/"):
         raise HTTPException(502, "GitHub вернул запуск другой ветки.")
     if request_id and build.get("display_title") != f"NIRS {request_id}":
+        # GitHub can return the workflow's default title before evaluating run-name.
+        # Wait briefly without accepting any jobs or artifacts until identity matches.
+        title = build.get("display_title")
+        recent = run.created_at > datetime.now(UTC) - timedelta(seconds=60)
+        if (
+            recent
+            and run.commit_sha is None
+            and STATUS.get(build.get("status")) in ("queued", "in_progress")
+            and (not title or title == build.get("name"))
+        ):
+            return run
         raise HTTPException(502, "GitHub вернул запуск с другим ключом запроса.")
     records = github.jobs(external_id)
     artifacts = (
