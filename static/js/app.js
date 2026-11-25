@@ -572,10 +572,15 @@ function renderArtifacts(artifacts) {
 async function connectionStatus() {
   if (!session.token()) return;
   const result = await request(api.system);
+  if (result.demo) {
+    const banner = el('p', 'notice', 'Демонстрационный режим · тестовые прогоны и ответы');
+    document.querySelector('main')?.prepend(banner);
+  }
   document.querySelectorAll('.connection').forEach((item) => {
-    item.replaceChildren(document.createTextNode(result.github.configured ? 'GitHub подключён' : 'GitHub не подключён'));
+    item.replaceChildren(document.createTextNode(result.demo ? 'Тестовый CI' : result.github.configured ? 'GitHub подключён' : 'GitHub не подключён'));
   });
   if ($('#integration-status')) {
+    if (result.demo) { $('#integration-status').hidden = true; return; }
     $('#integration-status').textContent = `${result.ollama.model}: ${result.ollama.available ? 'доступна' : 'недоступна'} · GitHub Actions: ${result.github.configured ? 'настроен' : 'ожидает настройки'}`;
   }
 }

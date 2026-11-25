@@ -63,6 +63,20 @@ jobs:
           node --check static/js/api.js
           bash -n scripts/build-aurora.sh scripts/build-aurora-bt.sh scripts/deploy.sh
           python -m py_compile scripts/check-aurora-live.py
+      - name: Run web demo in Chromium
+        timeout-minutes: 8
+        run: |
+          browser_tools="$RUNNER_TEMP/testops-browser"
+          npm install --prefix "$browser_tools" --no-save --no-package-lock playwright@1.58.2
+          "$browser_tools/node_modules/.bin/playwright" install --with-deps chromium
+          uv run --no-sync python demo_web.py > "$RUNNER_TEMP/testops-web.log" 2>&1 &
+          demo_pid=$!
+          trap 'kill "$demo_pid" 2>/dev/null || true' EXIT
+          if ! curl --retry 20 --retry-connrefused --retry-delay 1 --max-time 2 --fail --silent http://127.0.0.1:8010/health/ready; then
+            cat "$RUNNER_TEMP/testops-web.log"
+            exit 1
+          fi
+          NODE_PATH="$browser_tools/node_modules" node scripts/check-web-demo.cjs
       - name: Build portal image
         run: docker build -t nirs-portal:${{ github.sha }} .
       - name: Publish test report

@@ -123,7 +123,9 @@ def send_message(
     context_run_id: int | None = None,
 ) -> dict:
     chat = owned_chat(db, chat_id, user_id)
-    run_id = context_run_id or chat.run_id
+    run_ids = dict.fromkeys(
+        run_id for run_id in (chat.run_id, context_run_id) if run_id
+    )
     lease = str(uuid4())
     now = datetime.now(UTC)
     claimed = db.scalar(
@@ -138,6 +140,7 @@ def send_message(
         )
         .values(generation_id=lease, generation_started_at=now)
         .returning(Chat.id)
+        .execution_options(synchronize_session=False)
     )
     if claimed is None:
         db.rollback()
@@ -152,8 +155,13 @@ def send_message(
                 attachment, min(3200, 6500 - len(content) - header_size)
             )
         prompt = question_with_file(user_message)
-        context = run_context(db, run_id, user_id) if run_id else ""
-        context = context[: max(0, min(4000, 6500 - len(prompt)))]
+        context_limit = max(0, min(4000, 6500 - len(prompt)))
+        context = ""
+        if run_ids and context_limit >= 2 * len(run_ids) - 1:
+            per_run = (context_limit - len(run_ids) + 1) // len(run_ids)
+            context = "\n".join(
+                run_context(db, run_id, user_id)[:per_run] for run_id in run_ids
+            )
         history = list(
             db.scalars(
                 select(Message)
