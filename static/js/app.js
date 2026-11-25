@@ -99,7 +99,7 @@ function list(target, entries, kind) {
     return link;
   }));
 }
-function title(value) { if (value) { $('#page-title').textContent = value; document.title = `${value} — NIRS`; } }
+function title(value) { if (value) { $('#page-title').textContent = value; document.title = `${value} — TestOps Assistant`; } }
 function query(values) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(values)) if (value) params.set(key, value);
@@ -121,6 +121,18 @@ function renderMessage(message) {
     body.append(document.createTextNode(content.slice(start)));
   }
   block.append(el('div', 'message-label', user ? 'Вы' : 'Ассистент'), body);
+  if (!user) {
+    const download = el('button', 'button quiet', 'Скачать как текст');
+    download.type = 'button';
+    download.addEventListener('click', () => {
+      const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+      const link = el('a');
+      link.href = url; link.download = 'testops-response.txt';
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    });
+    block.append(download);
+  }
   return block;
 }
 async function auth() {
@@ -143,6 +155,11 @@ async function auth() {
   });
 }
 async function dashboard() {
+  $('#start-diagnosis').addEventListener('click', (event) => void busy(event.currentTarget, async () => {
+    clearNotice();
+    const result = await request(api.createChat, { method: 'POST', body: { title: 'Диагностика у стенда' } });
+    location.assign(`/chats/${idOf(result)}?diagnosis=1`);
+  }, 'Создаём…'));
   await Promise.all([
     load($('#recent-chats'), async () => list($('#recent-chats'), collection(await request(api.chats)).slice(0, 4), 'chat')),
     load($('#recent-runs'), async () => list($('#recent-runs'), collection(await request(api.runs)).slice(0, 4), 'run')),
@@ -170,6 +187,17 @@ async function chat() {
   const attachmentHint = attachmentInfo.textContent;
   const errorText = $('#message-error'); const count = $('#message-count');
   const maxMessage = 6000;
+  const mode = $('#diagnosis-mode'); const diagnosisFields = $('#diagnosis-fields');
+  const normalSendHint = $('#send-state').textContent;
+  function updateMode() {
+    diagnosisFields.hidden = !mode.checked;
+    $('#message-fields').hidden = mode.checked;
+    button.textContent = mode.checked ? 'Подготовить черновик' : 'Отправить ↑';
+    $('#send-state').textContent = mode.checked ? '' : normalSendHint;
+  }
+  mode.checked = new URLSearchParams(location.search).has('diagnosis');
+  mode.addEventListener('change', updateMode);
+  updateMode();
   let attachment = null;
   let readingFile = false;
   function checkLength() {
@@ -214,33 +242,72 @@ async function chat() {
   });
   button.disabled = true; input.disabled = true;
   let ready = false;
-  await load(messages, async () => {
+  let messageCount = 0;
+  let verifyBeforeSending = false;
+  async function refreshHistory() {
     const result = await request(api.chat(id));
     if (!Array.isArray(result.messages)) throw new Error('В ответе сервера отсутствует список messages.');
     title(result.title || `Диалог #${id}`);
-    if (result.messages.length) messages.replaceChildren(...result.messages.map(renderMessage));
+    messageCount = result.messages.length;
+    if (messageCount) messages.replaceChildren(...result.messages.map(renderMessage));
     else empty(messages, 'С чего начнём?', 'Задайте вопрос ассистенту в поле ниже.');
-    ready = true; button.disabled = false; input.disabled = false; attachButton.disabled = false;
     messages.scrollTop = messages.scrollHeight;
+  }
+  await load(messages, async () => {
+    await refreshHistory();
+    ready = true; button.disabled = false; input.disabled = false; attachButton.disabled = false;
   });
   form.addEventListener('submit', (event) => {
-    event.preventDefault(); const content = input.value.trim();
-    if (!ready || button.disabled || readingFile || !checkLength()) return;
-    if (!content && !attachment) { notice('Введите сообщение или прикрепите файл.'); return; }
+    event.preventDefault();
+    if (!ready || button.disabled || readingFile) return;
+    const diagnosis = mode.checked ? Object.fromEntries(
+      [...diagnosisFields.querySelectorAll('[name]')].map((field) => [field.name, field.value.trim()])
+    ) : null;
+    const content = diagnosis ? '' : input.value.trim();
+    if (diagnosis && !diagnosis.observed && !attachment) {
+      notice('Опишите фактический результат или приложите журнал.');
+      $('#observed').focus();
+      return;
+    }
+    if (!diagnosis && !checkLength()) return;
+    if (!diagnosis && !content && !attachment) { notice('Введите сообщение или прикрепите файл.'); return; }
     void busy(button, async () => {
       clearNotice(); input.disabled = true; attachButton.disabled = true; removeButton.disabled = true;
+      mode.disabled = true; diagnosisFields.disabled = true;
       $('#send-state').textContent = 'Ассистент готовит ответ…';
       try {
-        const result = await request(api.messages(id), { method: 'POST', body: { content, attachment } });
-        if (typeof result?.assistant_message?.content !== 'string') throw new Error('Сервер не вернул assistant_message.content. Обновите чат перед повторной отправкой.');
-        messages.querySelector('.empty')?.remove();
-        messages.append(renderMessage(result.user_message ?? { role: 'user', content }), renderMessage(result.assistant_message));
-        input.value = ''; checkLength(); clearAttachment(); messages.scrollTop = messages.scrollHeight;
+        const previousCount = messageCount;
+        if (verifyBeforeSending) await refreshHistory();
+        verifyBeforeSending = false;
+        if (messageCount === previousCount) {
+          let result;
+          try {
+            result = await request(api.messages(id), { method: 'POST', body: { content, attachment, diagnosis } });
+            if (typeof result?.assistant_message?.content !== 'string') {
+              throw new Error('Сервер не вернул ответ. Перед повтором проверим историю.');
+            }
+          } catch (error) {
+            verifyBeforeSending = !error.status || error.status === 409
+              || (error.status >= 200 && error.status < 300);
+            throw error;
+          }
+          messages.querySelector('.empty')?.remove();
+          messages.append(renderMessage(result.user_message ?? { role: 'user', content }), renderMessage(result.assistant_message));
+          messageCount += 2;
+        }
+        if (diagnosis) {
+          for (const field of diagnosisFields.querySelectorAll('[name]')) field.value = '';
+          mode.checked = false;
+          history.replaceState(null, '', location.pathname);
+        }
+        if (!diagnosis) input.value = '';
+        checkLength(); clearAttachment(); messages.scrollTop = messages.scrollHeight;
       } finally {
         input.disabled = false; attachButton.disabled = false; removeButton.disabled = false;
-        $('#send-state').textContent = 'Enter — отправить · Shift + Enter — новая строка'; input.focus();
+        mode.disabled = false; diagnosisFields.disabled = false;
+        if (mode.checked) $('#observed').focus(); else input.focus();
       }
-    }, 'Ожидание…');
+    }, 'Ожидание…').finally(updateMode);
   });
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); if (!button.disabled) form.requestSubmit(); }

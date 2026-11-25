@@ -21,7 +21,7 @@ Page {
         id: sendRequest; responseType: "message"
         property string sentContent: ""
         onSuccess: {
-            page.messages = page.messages.concat([{role: "user", content: sentContent}, data.assistant_message])
+            page.messages = page.messages.concat([data.user_message || {role: "user", content: sentContent}, data.assistant_message])
             input.text = ""
             history.positionViewAtEnd()
         }
@@ -46,7 +46,14 @@ Page {
             width: history.width
             spacing: Theme.paddingSmall
             Label { x: Theme.horizontalPageMargin; text: modelData.role === "user" ? "Вы" : modelData.role === "assistant" ? "Ассистент" : String(modelData.role || "Сообщение"); color: Theme.highlightColor; font.pixelSize: Theme.fontSizeSmall }
+            Notice { text: modelData.attachment_name || "" }
             Label { x: Theme.horizontalPageMargin; width: parent.width - 2 * x; text: modelData.content; textFormat: Text.PlainText; wrapMode: Text.Wrap }
+            Button {
+                x: Theme.horizontalPageMargin
+                visible: modelData.role === "assistant"
+                text: "Копировать ответ"
+                onClicked: Api.copyText(modelData.content)
+            }
             Item { width: 1; height: Theme.paddingLarge }
         }
         VerticalScrollDecorator {}

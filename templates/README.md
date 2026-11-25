@@ -1,4 +1,4 @@
-# Интерфейс NIRS
+# Интерфейс TestOps Assistant
 
 Страницы — обычный HTML без Jinja. Общие стили: `static/css/style.css`.
 Поведение страниц: `static/js/app.js`. Все адреса API: `static/js/api.js`.
@@ -52,15 +52,20 @@ FastAPI/Uvicorn объявлены в `pyproject.toml`, зависимости �
 | `GET /api/chats` | Необязательный поиск `?q=...` | Чаты: `id`, `title`, `created_at`, `last_activity_at` |
 | `POST /chats/new` | `{}` | Созданный чат: `{"id":12}` |
 | `GET /api/chats/{chat_id}` | — | `{"id":12,"title":"Вопрос","messages":[{"role":"user","content":"Привет"},{"role":"assistant","content":"Здравствуйте"}]}` |
-| `POST /api/chats/{chat_id}/messages` | `{"content":"Текст вопроса"}` | `{"assistant_message":{"role":"assistant","content":"Ответ"}}` |
+| `POST /api/chats/{chat_id}/messages` | `{content,attachment?}` или `{diagnosis,attachment?}` | `{"assistant_message":{"role":"assistant","content":"Ответ"}}` |
 | `GET /api/pipelines` | — | Пайплайны: `id`, `name`, `description` |
 | `GET /api/pipelines/{pipeline_id}` | — | Пайплайн: `id`, `name`, `description` |
 | `POST /pipelines/{pipeline_id}/start` | `{}` или `{"branch":"main"}`; заголовок `Idempotency-Key` для защиты от повторов | Созданный запуск: `{"id":123}` |
 | `GET /api/runs` | Необязательные `pipeline_id`, `result` | Запуски: `id`, `name`, `pipeline_id`, `pipeline_name`, `status`, `result`, `created_at` |
 | `GET /api/runs/{run_id}` | — | Запуск со списком `jobs`, см. пример ниже |
 | `GET /api/runs/{run_id}/status` | — | Полный актуальный запуск со списком `jobs`, тот же формат |
+| `POST /api/runs/{run_id}/analysis` | `{}` | `{id}` чата с разбором завершённого прогона |
 | `GET /api/jobs/{job_id}` | — | Джоба: `id`, `name`, `run_id`, `status`, `result`, `started_at`, `finished_at` |
 | `GET /jobs/{job_id}/log` | — | Текст, `Content-Type: text/plain; charset=utf-8` |
+
+Карточка `diagnosis` содержит строковые поля `bench`, `environment`, `steps`,
+`expected`, `observed`. Нужен `observed` или текстовое вложение
+`attachment: {name, text}`. Ответ сохраняется вместе с карточкой в истории чата.
 
 Пример запуска:
 

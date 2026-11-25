@@ -10,7 +10,7 @@ const rejects = fn => assert.throws(fn);
 test('all documented routes and encoded IDs', () => {
   const plain = {login:'/auth/send',register:'/auth/register/send',chats:'/api/chats',createChat:'/chats/new',pipelines:'/api/pipelines',runs:'/api/runs'};
   for (const [k,v] of Object.entries(plain)) assert.equal(c.route(k), v);
-  const detail = {chat:'/api/chats/x%2Fy%3F%23',messages:'/api/chats/x%2Fy%3F%23/messages',pipeline:'/api/pipelines/x%2Fy%3F%23',startPipeline:'/pipelines/x%2Fy%3F%23/start',run:'/api/runs/x%2Fy%3F%23',status:'/api/runs/x%2Fy%3F%23/status',job:'/api/jobs/x%2Fy%3F%23',log:'/jobs/x%2Fy%3F%23/log'};
+  const detail = {chat:'/api/chats/x%2Fy%3F%23',messages:'/api/chats/x%2Fy%3F%23/messages',pipeline:'/api/pipelines/x%2Fy%3F%23',startPipeline:'/pipelines/x%2Fy%3F%23/start',run:'/api/runs/x%2Fy%3F%23',status:'/api/runs/x%2Fy%3F%23/status',analysis:'/api/runs/x%2Fy%3F%23/analysis',job:'/api/jobs/x%2Fy%3F%23',log:'/jobs/x%2Fy%3F%23/log'};
   for (const [k,v] of Object.entries(detail)) assert.equal(c.route(k,'x/y?#'),v);
   assert.equal(c.route('job',0),'/api/jobs/0');
   for (const invalid of [undefined,null,'',{},[]]) rejects(()=>c.route('chat',invalid));

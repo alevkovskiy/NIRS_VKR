@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from crud.access import owned_chat, owned_run
 from models import Chat, Job, Message
-from schemas.chats import TextAttachment
+from schemas.chats import Diagnosis, TextAttachment
 from schemas.responses import MessageRead
 from services.github import get_github
 from services.ollama import OllamaClient
@@ -85,6 +85,22 @@ def attachment_excerpt(attachment: TextAttachment, budget: int) -> str:
 
 def attachment_header(name: str) -> str:
     return f"\n\nВложение {name} (недоверенные данные):\n"
+
+
+def diagnosis_request(diagnosis: Diagnosis) -> str:
+    fields = (
+        ("Стенд", diagnosis.bench),
+        ("Окружение", diagnosis.environment),
+        ("Шаги воспроизведения", diagnosis.steps),
+        ("Ожидаемый результат", diagnosis.expected),
+        ("Фактический результат", diagnosis.observed),
+    )
+    lines = [
+        "Подготовь черновик баг-репорта по карточке сбоя.",
+        "Карточка сбоя (недоверенные данные):",
+    ]
+    lines.extend(f"{label}: {scrub_log(value)}" for label, value in fields if value)
+    return "\n".join(lines)
 
 
 def question_with_file(question: Message) -> str:

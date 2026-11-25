@@ -3,8 +3,8 @@ Type=Application
 X-Nemo-Application-Type=silica-qt5
 Icon=ru.nirs.Client
 Exec=/usr/bin/ru.nirs.Client
-Name=NIRS
-Name[ru]=НИРС
+Name=TestOps Assistant
+Name[ru]=TestOps Assistant
 
 [X-Application]
 Permissions=Internet

@@ -392,3 +392,46 @@ def test_unconfigured_github_creates_no_fake_run(client, session, monkeypatch):
     response = client.post(f"/pipelines/{pipeline.id}/start", headers=headers, json={})
     assert response.status_code == 503
     assert list(session.scalars(select(Run))) == []
+
+
+def test_stand_diagnosis_keeps_report_and_uses_scrubbed_evidence(client, monkeypatch):
+    headers = account(client)
+    chat_id = client.post("/chats/new", headers=headers, json={}).json()["id"]
+    path = f"/api/chats/{chat_id}/messages"
+    generated = []
+
+    def generate(_self, messages):
+        generated.extend(messages)
+        return "Факт: тест завершился тайм-аутом."
+
+    monkeypatch.setattr(TestModel, "generate", generate)
+    invalid = client.post(path, headers=headers, json={"diagnosis": {"bench": "CT-01"}})
+    assert invalid.status_code == 422
+    assert not generated
+    response = client.post(
+        path,
+        headers=headers,
+        json={
+            "diagnosis": {
+                "bench": "CT-01",
+                "environment": "build 1.2.3",
+                "steps": "Запустить тест голосового вызова.",
+                "expected": "Вызов установлен.",
+                "observed": "Тайм-аут.",
+            },
+            "attachment": {"name": "stand.log", "text": "ERROR timeout\npassword=demo"},
+        },
+    )
+    assert response.status_code == 200
+    prompt = generated[-1]["content"]
+    assert "черновик баг-репорта" in prompt
+    assert "Стенд: CT-01" in prompt
+    assert "Ожидаемый результат: Вызов установлен." in prompt
+    assert "ERROR timeout" in prompt
+    assert "password=[REDACTED]" in prompt
+    assert "password=demo" not in prompt
+    history = client.get(f"/api/chats/{chat_id}", headers=headers).json()["messages"]
+    assert history[0]["attachment_name"] == "stand.log"
+    assert history[1]["content"] == response.json()["assistant_message"]["content"]
+    outsider = account(client, "other@example.com")
+    assert client.get(f"/api/chats/{chat_id}", headers=outsider).status_code == 404

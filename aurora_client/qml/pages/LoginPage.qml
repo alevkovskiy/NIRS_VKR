@@ -36,7 +36,7 @@ Page {
             id: content
             width: parent.width
             spacing: Theme.paddingMedium
-            PageHeader { title: page.registration ? "Создать аккаунт" : "Вход в NIRS"; description: "Чаты · Пайплайны · Запуски" }
+            PageHeader { title: page.registration ? "Создать аккаунт" : "Вход в TestOps Assistant" }
             Notice { text: page.localNotice }
             Notice { text: action.error }
             TextField {

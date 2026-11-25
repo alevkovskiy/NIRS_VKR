@@ -27,6 +27,10 @@ Page {
         }
         onFailure: { page.polling = false; poll.stop() }
     }
+    Request {
+        id: analysisRequest
+        onSuccess: pageStack.push(Qt.resolvedUrl("ChatPage.qml"), {entityId: String(data.id)})
+    }
     Timer { id: poll; interval: 5000; repeat: false; onTriggered: page.refresh(false) }
     SilicaFlickable {
         anchors.fill: parent
@@ -42,6 +46,14 @@ Page {
                 visible: page.loaded
                 rows: [["ID", page.run.id], ["Пайплайн", page.run.pipeline_name || page.run.pipeline_id], ["Статус", Contract.status(page.run.result || page.run.status)], ["Создан", Contract.date(page.run.created_at)], ["Начало", Contract.date(page.run.started_at)], ["Завершение", Contract.date(page.run.finished_at)]]
             }
+            Button {
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: page.loaded && Contract.finished(page.run)
+                enabled: !analysisRequest.busy
+                text: analysisRequest.busy ? "Разбираем прогон…" : "Разобрать прогон"
+                onClicked: analysisRequest.call("analysis", page.entityId, {})
+            }
+            Notice { text: analysisRequest.error }
             SectionHeader { text: "Задачи" }
             Notice { text: page.loaded && !page.run.jobs.length ? "Задачи пока не появились." : "" }
             Repeater {

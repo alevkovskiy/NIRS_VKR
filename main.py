@@ -13,7 +13,7 @@ from routers.pipelines import router as pipelines_router
 from routers.runs import router as runs_router
 from routers.system import router as system_router
 
-app = FastAPI(title="NIRS — сборки мобильного клиента")
+app = FastAPI(title="TestOps Assistant")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.include_router(chats_router)
 app.include_router(pipelines_router)

@@ -19,6 +19,7 @@ function route(kind, id) {
     case 'startPipeline': return '/pipelines/' + key + '/start';
     case 'run': return '/api/runs/' + key;
     case 'status': return '/api/runs/' + key + '/status';
+    case 'analysis': return '/api/runs/' + key + '/analysis';
     case 'job': return '/api/jobs/' + key;
     case 'log': return '/jobs/' + key + '/log';
     }

@@ -10,7 +10,9 @@ Page {
     function refresh() { chatRequest.call("chats"); runRequest.call("runs") }
     Request { id: chatRequest; responseType: "list"; onSuccess: page.chats = data.slice(0, 4) }
     Request { id: runRequest; responseType: "list"; onSuccess: page.runs = data.slice(0, 4) }
-    Component.onCompleted: refresh()
+    onStatusChanged: {
+        if (status === PageStatus.Active && !chatRequest.busy && !runRequest.busy) refresh()
+    }
     SilicaFlickable {
         anchors.fill: parent
         contentHeight: content.height + Theme.paddingLarge
@@ -22,10 +24,16 @@ Page {
         Column {
             id: content
             width: parent.width
-            PageHeader { title: "NIRS"; description: "Рабочее пространство" }
+            PageHeader { title: "TestOps Assistant" }
+            Entry {
+                width: parent.width
+                title: "Описать сбой"
+                subtitle: "Диагностика у стенда и черновик баг-репорта"
+                onClicked: pageStack.push(Qt.resolvedUrl("DiagnosisPage.qml"))
+            }
             Entry { width: parent.width; title: "Чаты"; subtitle: "Вопросы ассистенту и история диалогов"; onClicked: pageStack.push(Qt.resolvedUrl("CollectionPage.qml"), {kind: "chats"}) }
             Entry { width: parent.width; title: "Пайплайны"; subtitle: "Просмотр и запуск сборок"; onClicked: pageStack.push(Qt.resolvedUrl("CollectionPage.qml"), {kind: "pipelines"}) }
-            Entry { width: parent.width; title: "Запуски"; subtitle: "Состояние, задачи и журналы"; onClicked: pageStack.push(Qt.resolvedUrl("CollectionPage.qml"), {kind: "runs"}) }
+            Entry { width: parent.width; title: "Результаты прогонов"; subtitle: "Состояние, задачи и журналы"; onClicked: pageStack.push(Qt.resolvedUrl("CollectionPage.qml"), {kind: "runs"}) }
             SectionHeader { text: "Последние диалоги" }
             Notice { text: chatRequest.error }
             Notice { text: chatRequest.busy ? "Загрузка…" : !page.chats.length && !chatRequest.error ? "Диалогов пока нет. Создайте первый в разделе «Чаты»." : "" }

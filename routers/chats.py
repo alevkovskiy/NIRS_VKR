@@ -10,7 +10,7 @@ from models import Chat, Message
 from schemas.chats import ChatCreate, MessageCreate
 from schemas.responses import ChatRead, ChatSummary, MessageRead, MessageReply
 from security import CurrentUser, Db
-from services.chats import send_message
+from services.chats import diagnosis_request, send_message
 from services.ollama import OllamaClient, get_ollama
 
 router = APIRouter(tags=["Chats"])
@@ -78,4 +78,5 @@ def message(
     user: CurrentUser,
     ollama: Annotated[OllamaClient, Depends(get_ollama)],
 ):
-    return send_message(db, chat_id, user.id, data.content, ollama, data.attachment)
+    content = diagnosis_request(data.diagnosis) if data.diagnosis else data.content
+    return send_message(db, chat_id, user.id, content, ollama, data.attachment)

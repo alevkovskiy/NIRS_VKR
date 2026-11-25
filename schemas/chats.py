@@ -1,7 +1,7 @@
 import re
 from pathlib import PurePath
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 TEXT_EXTENSIONS = {".log", ".txt", ".md", ".csv", ".json", ".xml", ".yaml", ".yml"}
@@ -42,9 +42,20 @@ class TextAttachment(BaseModel):
         return value
 
 
+class Diagnosis(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    bench: str = Field(max_length=120, default="")
+    environment: str = Field(max_length=200, default="")
+    steps: str = Field(max_length=600, default="")
+    expected: str = Field(max_length=400, default="")
+    observed: str = Field(max_length=1000, default="")
+
+
 class MessageCreate(BaseModel):
     content: str = ""
     attachment: TextAttachment | None = None
+    diagnosis: Diagnosis | None = None
 
     @field_validator("content")
     @classmethod
@@ -55,6 +66,12 @@ class MessageCreate(BaseModel):
 
     @model_validator(mode="after")
     def require_message(self):
+        if self.diagnosis is not None:
+            if not self.diagnosis.observed and self.attachment is None:
+                raise ValueError("Опишите фактический результат или приложите журнал.")
+            if self.content:
+                raise ValueError("Для диагностики используйте поля карточки сбоя.")
+            return self
         if not self.content and self.attachment is None:
             raise ValueError("Введите сообщение или прикрепите файл.")
         if not self.content:
