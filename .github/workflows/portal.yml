@@ -2,7 +2,6 @@ name: Portal CI
 run-name: ${{ inputs.portal_request_id && format('NIRS {0}', inputs.portal_request_id) || format('Portal CI — {0}', github.ref_name) }}
 on:
   push:
-    branches: [main, 'codex/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
