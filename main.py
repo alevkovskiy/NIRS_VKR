@@ -8,6 +8,7 @@ from config import BASE_DIR
 from database import get_engine
 from routers.auth import router as auth_router
 from routers.chats import router as chats_router
+from routers.diagnostics import router as diagnostics_router
 from routers.jobs import router as jobs_router
 from routers.pipelines import router as pipelines_router
 from routers.runs import router as runs_router
@@ -16,6 +17,7 @@ from routers.system import router as system_router
 app = FastAPI(title="TestOps Assistant")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.include_router(chats_router)
+app.include_router(diagnostics_router)
 app.include_router(pipelines_router)
 app.include_router(runs_router)
 app.include_router(auth_router)

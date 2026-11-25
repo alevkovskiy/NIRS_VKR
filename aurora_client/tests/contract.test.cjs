@@ -63,4 +63,14 @@ test('credential validation and status/date labels', () => {
   assert.equal(c.date('invalid'),'—');
   assert.equal(c.date(null),'—');
 });
+
+test('diagnostic sessions preserve encoded IDs and validate linked history', () => {
+  assert.equal(c.route('diagnostics'), '/api/diagnostics');
+  assert.equal(c.route('createDiagnostic'), '/api/diagnostics');
+  assert.equal(c.route('diagnosticReport', '5/6'), '/api/diagnostics/5%2F6/report');
+  assert.equal(c.route('diagnosticCi', {sessionId: 5, runId: '6/7'}), '/api/diagnostics/5/ci/6%2F7');
+  assert.equal(c.validate('diagnostic', {id: 5, chat_id: 7, checks: [{id: 9}]}).chat_id, 7);
+  rejects(() => c.validate('diagnostic', {id: 5, checks: []}));
+  rejects(() => c.validate('diagnostic', {id: 5, chat_id: 7, checks: [{}]}));
+});
 console.log(`${passed} contract test groups passed`);

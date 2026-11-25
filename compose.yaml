@@ -25,6 +25,9 @@ services:
       GH_OWNER: ${GH_OWNER:-alevkovskiy}
       GH_REPO: ${GH_REPO:-NIRS_VKR}
       GH_ACTIONS_TOKEN: ${GH_ACTIONS_TOKEN:-}
+      TESTOPS_STAND_REPORT: ${TESTOPS_STAND_REPORT:-}
+    volumes:
+      - "${TESTOPS_STAND_DIR:-./examples/stand}:/stand:ro"
     ports:
       - "127.0.0.1:${APP_PORT:-8000}:8000"
     depends_on:

@@ -54,6 +54,12 @@ Page {
                 onClicked: analysisRequest.call("analysis", page.entityId, {})
             }
             Notice { text: analysisRequest.error }
+            Button {
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: page.loaded
+                text: "Создать карточку сбоя"
+                onClicked: pageStack.push(Qt.resolvedUrl("DiagnosisPage.qml"), {sourceRunId: page.entityId})
+            }
             SectionHeader { text: "Задачи" }
             Notice { text: page.loaded && !page.run.jobs.length ? "Задачи пока не появились." : "" }
             Repeater {

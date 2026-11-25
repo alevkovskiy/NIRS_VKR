@@ -3,6 +3,8 @@ const segment = (value) => encodeURIComponent(String(value));
 export const endpoints = {
   login: '/auth/send', register: '/auth/register/send', logout: '/auth/logout',
   system: '/api/system/status',
+  diagnostics: '/api/diagnostics',
+  diagnostic: (id) => `/api/diagnostics/${segment(id)}`,
   analysis: (id) => `/api/runs/${segment(id)}/analysis`,
   artifact: (id) => `/api/artifacts/${segment(id)}/download`,
   chats: '/api/chats', createChat: '/chats/new',

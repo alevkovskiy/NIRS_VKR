@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -12,6 +12,9 @@ class Settings(BaseSettings):
         env_file=BASE_DIR / ".env", env_file_encoding="utf-8", extra="ignore"
     )
     database_url: SecretStr
+    testops_stand_report: Path | None = Field(
+        default=None, validation_alias="TESTOPS_STAND_REPORT"
+    )
     session_hours: int = Field(default=24, ge=1, le=168)
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3.5:9b"
@@ -22,6 +25,11 @@ class Settings(BaseSettings):
     github_token: SecretStr = Field(
         default=SecretStr(""), validation_alias="GH_ACTIONS_TOKEN"
     )
+
+    @field_validator("testops_stand_report", mode="before")
+    @classmethod
+    def empty_stand_path(cls, value):
+        return value or None
 
     @property
     def github_configured(self) -> bool:

@@ -23,6 +23,7 @@ public:
     Q_INVOKABLE int request(const QString &method, const QString &path,
                             const QVariantMap &body, bool auth = true, bool plainText = false);
     Q_INVOKABLE void cancel(int requestId);
+    Q_INVOKABLE QString newRequestId() const;
     Q_INVOKABLE void copyText(const QString &text);
 signals:
     void baseUrlChanged();

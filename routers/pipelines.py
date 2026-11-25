@@ -53,8 +53,17 @@ def start(
     user: CurrentUser,
     idempotency_key: Annotated[str | None, Header(max_length=64, min_length=8)] = None,
 ):
+    return dispatch_run(db, user.id, pipeline_id, data, idempotency_key)
+
+
+def dispatch_run(
+    db: Db,
+    owner_id: int,
+    pipeline_id: int,
+    data: RunCreate,
+    idempotency_key: str | None,
+):
     pipeline = get_pipeline(db, pipeline_id)
-    owner_id = user.id
     branch = data.branch or pipeline.default_branch
     if idempotency_key:
         existing = db.scalar(

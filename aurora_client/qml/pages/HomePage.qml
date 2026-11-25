@@ -28,8 +28,14 @@ Page {
             Entry {
                 width: parent.width
                 title: "Описать сбой"
-                subtitle: "Диагностика у стенда и черновик баг-репорта"
+                subtitle: "Новая диагностическая сессия"
                 onClicked: pageStack.push(Qt.resolvedUrl("DiagnosisPage.qml"))
+            }
+            Entry {
+                width: parent.width
+                title: "Диагностические сессии"
+                subtitle: "Карточки сбоев и результаты проверок"
+                onClicked: pageStack.push(Qt.resolvedUrl("DiagnosticListPage.qml"))
             }
             Entry { width: parent.width; title: "Чаты"; subtitle: "Вопросы ассистенту и история диалогов"; onClicked: pageStack.push(Qt.resolvedUrl("CollectionPage.qml"), {kind: "chats"}) }
             Entry { width: parent.width; title: "Пайплайны"; subtitle: "Просмотр и запуск сборок"; onClicked: pageStack.push(Qt.resolvedUrl("CollectionPage.qml"), {kind: "pipelines"}) }

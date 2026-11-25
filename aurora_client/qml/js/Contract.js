@@ -8,10 +8,11 @@ function route(kind, id) {
     var routes = {
         login: '/auth/send', register: '/auth/register/send',
         chats: '/api/chats', createChat: '/chats/new',
-        pipelines: '/api/pipelines', runs: '/api/runs'
+        pipelines: '/api/pipelines', runs: '/api/runs',
+        diagnostics: '/api/diagnostics', createDiagnostic: '/api/diagnostics'
     };
     if (routes[kind]) return routes[kind];
-    var key = segment(id);
+    var key = segment(kind === 'diagnosticCi' ? id.sessionId : id);
     switch (kind) {
     case 'chat': return '/api/chats/' + key;
     case 'messages': return '/api/chats/' + key + '/messages';
@@ -19,6 +20,13 @@ function route(kind, id) {
     case 'startPipeline': return '/pipelines/' + key + '/start';
     case 'run': return '/api/runs/' + key;
     case 'status': return '/api/runs/' + key + '/status';
+    case 'diagnostic': return '/api/diagnostics/' + key;
+    case 'diagnosticCheck': return '/api/diagnostics/' + key + '/checks';
+    case 'diagnosticStatus': return '/api/diagnostics/' + key + '/status';
+    case 'diagnosticStand': return '/api/diagnostics/' + key + '/stand';
+    case 'diagnosticRepeat': return '/api/diagnostics/' + key + '/repeat';
+    case 'diagnosticReport': return '/api/diagnostics/' + key + '/report';
+    case 'diagnosticCi': return '/api/diagnostics/' + key + '/ci/' + segment(id.runId);
     case 'analysis': return '/api/runs/' + key + '/analysis';
     case 'job': return '/api/jobs/' + key;
     case 'log': return '/jobs/' + key + '/log';
@@ -66,6 +74,10 @@ function validate(type, data) {
                 if (!object(data.messages[j]) || typeof data.messages[j].content !== 'string')
                     throw new Error('Некорректное сообщение в истории.');
         }
+        if (type === 'diagnostic') {
+            segment(data.chat_id);
+            validate('list', data.checks);
+        }
         if (type === 'run') {
             if (!Array.isArray(data.jobs)) throw new Error('В ответе отсутствует список jobs.');
             validate('list', data.jobs);
@@ -100,4 +112,12 @@ function credentials(email, password, confirm, register) {
     if (!password.length) return 'Введите пароль.';
     if (register && password !== confirm) return 'Пароли не совпадают.';
     return '';
+}
+
+function diagnosticStatus(value) { return value === 'resolved' ? 'Решён' : 'Открыт'; }
+function checkOutcome(value) {
+    return {passed: 'Успешно', failed: 'Сбой', inconclusive: 'Недостаточно данных'}[value] || value;
+}
+function checkSource(value) {
+    return {manual: 'Вручную', stand: 'Снимок стенда', ci: 'CI'}[value] || value;
 }

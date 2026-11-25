@@ -119,9 +119,11 @@ def send_message(
     content: str,
     ollama: OllamaClient,
     attachment: TextAttachment | None = None,
+    *,
+    context_run_id: int | None = None,
 ) -> dict:
     chat = owned_chat(db, chat_id, user_id)
-    run_id = chat.run_id
+    run_id = context_run_id or chat.run_id
     lease = str(uuid4())
     now = datetime.now(UTC)
     claimed = db.scalar(

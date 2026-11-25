@@ -105,6 +105,18 @@ function query(values) {
   for (const [key, value] of Object.entries(values)) if (value) params.set(key, value);
   return params.size ? `?${params}` : '';
 }
+async function readTextAttachment(file) {
+  if (!file?.size) return null;
+  if (!/\.(log|txt|md|csv|json|xml|ya?ml)$/i.test(file.name)) {
+    throw new Error('Выберите лог или текстовый файл поддерживаемого формата.');
+  }
+  if (file.size > 10 * 1024 * 1024) throw new Error('Файл слишком большой. Максимум 10 МБ.');
+  let text;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer()); }
+  catch { throw new Error('Не удалось прочитать файл. Выберите текст в UTF-8.'); }
+  if (!text.trim() || text.includes('\0')) throw new Error('Файл должен содержать непустой текст.');
+  return { name: file.name, text };
+}
 function renderMessage(message) {
   const user = message.role === 'user'; const block = el('article', `message${user ? ' user' : ''}`);
   const body = el('div', 'message-body');
@@ -155,11 +167,6 @@ async function auth() {
   });
 }
 async function dashboard() {
-  $('#start-diagnosis').addEventListener('click', (event) => void busy(event.currentTarget, async () => {
-    clearNotice();
-    const result = await request(api.createChat, { method: 'POST', body: { title: 'Диагностика у стенда' } });
-    location.assign(`/chats/${idOf(result)}?diagnosis=1`);
-  }, 'Создаём…'));
   await Promise.all([
     load($('#recent-chats'), async () => list($('#recent-chats'), collection(await request(api.chats)).slice(0, 4), 'chat')),
     load($('#recent-runs'), async () => list($('#recent-runs'), collection(await request(api.runs)).slice(0, 4), 'run')),
@@ -226,15 +233,8 @@ async function chat() {
     readingFile = true;
     attachButton.disabled = true;
     try {
-      if (!/\.(log|txt|md|csv|json|xml|ya?ml)$/i.test(file.name)) {
-        throw new Error('Выберите лог или текстовый файл поддерживаемого формата.');
-      }
-      if (file.size > 10 * 1024 * 1024) throw new Error('Файл слишком большой. Максимум 10 МБ.');
-      let text;
-      try { text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer()); }
-      catch { throw new Error('Не удалось прочитать файл. Выберите текст в UTF-8.'); }
-      if (!text.trim() || text.includes('\0')) throw new Error('Файл должен содержать непустой текст.');
-      attachment = { name: file.name, text };
+      attachment = await readTextAttachment(file);
+      if (!attachment) throw new Error('Файл должен содержать непустой текст.');
       attachmentInfo.textContent = file.name;
       removeButton.hidden = false;
     } catch (error) { report(error); }
@@ -313,6 +313,163 @@ async function chat() {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); if (!button.disabled) form.requestSubmit(); }
   });
 }
+const diagnosticStatus = { open: 'Открыт', resolved: 'Решён' };
+const checkOutcome = { passed: 'Успешно', failed: 'Сбой', inconclusive: 'Недостаточно данных' };
+const checkSource = { manual: 'Вручную', stand: 'Снимок стенда', ci: 'CI' };
+
+function requestId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function fillRunSelect(select, entries, selected, placeholder) {
+  select.replaceChildren(new Option(placeholder, ''));
+  for (const run of entries) {
+    select.add(new Option(`#${run.id} · ${run.name}`, run.id));
+  }
+  if (selected) {
+    if (!entries.some((run) => String(run.id) === selected)) {
+      select.add(new Option(`#${selected}`, selected));
+    }
+    select.value = selected;
+  }
+}
+
+async function diagnostics() {
+  const parts = location.pathname.split('/').filter(Boolean);
+  if (parts.length === 1) {
+    $('#diagnostic-overview').hidden = false;
+    const params = new URLSearchParams(location.search);
+    const preselected = params.get('run_id');
+    const runSelect = $('#diag-run');
+    const initialRequestId = requestId();
+    $('#diagnostic-create').open = params.has('new');
+    fillRunSelect(runSelect, [], preselected, 'Без прогона');
+    $('#diagnostic-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const fields = form.elements;
+      const diagnosis = Object.fromEntries(
+        ['bench', 'environment', 'steps', 'expected', 'observed']
+          .map((key) => [key, fields[key].value.trim()])
+      );
+      const file = fields.attachment.files[0];
+      const title = fields.title.value.trim();
+      const run_id = fields.run_id.value ? Number(fields.run_id.value) : null;
+      void busy(form.querySelector('button'), async () => {
+        clearNotice();
+        const attachment = await readTextAttachment(file);
+        if (!diagnosis.observed && !attachment && !run_id) {
+          throw new Error('Добавьте фактический результат, журнал или связанный прогон.');
+        }
+        const item = await request(api.diagnostics, {
+          method: 'POST', body: { title, diagnosis, attachment, run_id, request_id: initialRequestId },
+        });
+        location.assign(`/diagnostics/${idOf(item)}`);
+      }, 'Сохраняем…');
+    });
+    void request(api.runs).then((runs) => fillRunSelect(runSelect, collection(runs), runSelect.value || preselected, 'Без прогона')).catch(report);
+    const target = $('#diagnostic-list');
+    return load(target, async () => {
+      const entries = collection(await request(api.diagnostics));
+      if (!entries.length) return empty(target, 'Сессий пока нет', 'Опишите сбой, чтобы начать диагностику.');
+      target.replaceChildren(...entries.map((item) => {
+        const link = el('a', 'item'); link.href = `/diagnostics/${idOf(item)}`;
+        const text = el('div');
+        text.append(el('div', 'item-title', item.title), el('div', 'item-meta',
+          [item.bench, date(item.created_at)].filter(Boolean).join(' · ')));
+        link.append(text, badge(diagnosticStatus[item.status]));
+        return link;
+      }));
+    });
+  }
+
+  $('#diagnostic-detail').hidden = false;
+  const path = api.diagnostic(routeId());
+  const statusButton = $('#diagnostic-status');
+  const checkContainer = $('#diagnostic-checks');
+  const ciForm = $('#ci-check-form');
+  let session;
+  let manualRequestId = requestId();
+  const repeatRequestId = requestId();
+  async function refresh() {
+    session = await request(path);
+    title(session.title);
+    const runLink = el('a', '', session.run_id ? `#${session.run_id}` : '—');
+    if (session.run_id) runLink.href = `/runs/${encodeURIComponent(session.run_id)}`;
+    details($('#diagnostic-card'), [
+      ['Статус', diagnosticStatus[session.status]], ['Стенд', session.bench || '—'],
+      ['Окружение', session.environment || '—'], ['Шаги', session.steps || '—'],
+      ['Ожидалось', session.expected || '—'], ['Наблюдалось', session.observed || '—'],
+      ['Прогон CI', runLink],
+    ]);
+    $('#diagnostic-chat').href = `/chats/${encodeURIComponent(session.chat_id)}`;
+    $('#diagnostic-log-panel').hidden = !session.log_excerpt;
+    $('#diagnostic-log-name').textContent = session.log_name || 'Журнал';
+    $('#diagnostic-log').textContent = session.log_excerpt || '';
+    $('#import-stand').hidden = !session.stand_available;
+    $('#repeat-ci').hidden = !session.run_id;
+    statusButton.textContent = session.status === 'open' ? 'Отметить решённым' : 'Переоткрыть';
+    if (!session.checks.length) return empty(checkContainer, 'Проверок пока нет', 'Запишите наблюдение или импортируйте результат.');
+    checkContainer.replaceChildren(...session.checks.map((check) => {
+      const row = el('div', 'item');
+      const detail = el('div');
+      detail.append(el('div', 'item-title', check.name), el('div', 'item-meta',
+        [checkSource[check.source], date(check.recorded_at), check.note].filter(Boolean).join(' · ')));
+      if (check.run_id) {
+        const link = el('a', '', 'Открыть прогон');
+        link.href = `/runs/${encodeURIComponent(check.run_id)}`;
+        detail.append(link);
+      }
+      row.append(detail, badge(checkOutcome[check.outcome]));
+      return row;
+    }));
+  }
+  async function mutate(subpath, body) {
+    clearNotice();
+    await request(path + subpath, { method: 'POST', body });
+    await refresh();
+  }
+  await refresh();
+  statusButton.addEventListener('click', () => void busy(statusButton, () =>
+    mutate('/status', { status: session.status === 'open' ? 'resolved' : 'open' })));
+  const standButton = $('#import-stand');
+  standButton.addEventListener('click', () => void busy(standButton, () => mutate('/stand', {})));
+  const repeatButton = $('#repeat-ci');
+  repeatButton.addEventListener('click', () => void busy(repeatButton, async () => {
+    clearNotice();
+    const run = await request(path + '/repeat', { method: 'POST', body: { request_id: repeatRequestId } });
+    location.assign(`/runs/${idOf(run)}`);
+  }, 'Запускаем…'));
+  const reportButton = $('#diagnostic-report');
+  reportButton.addEventListener('click', () => void busy(reportButton, async () => {
+    clearNotice();
+    await request(path + '/report', { method: 'POST', body: {} });
+    location.assign(`/chats/${encodeURIComponent(session.chat_id)}`);
+  }, 'Готовим черновик…'));
+  $('#manual-check-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    void busy(form.querySelector('button'), async () => {
+      await mutate('/checks', {
+        name: values.get('check_name'), outcome: values.get('outcome'),
+        note: values.get('note'), request_id: manualRequestId,
+      });
+      manualRequestId = requestId();
+      form.reset();
+    }, 'Сохраняем…');
+  });
+  ciForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const selected = ciForm.elements.run_id.value;
+    if (selected) void busy(ciForm.querySelector('button'), () => mutate(`/ci/${encodeURIComponent(selected)}`, {}));
+  });
+  void request(api.runs).then((runs) =>
+    fillRunSelect(ciForm.elements.run_id, collection(runs).filter((run) => run.status === 'completed'),
+      null, 'Выберите прогон')).catch(report);
+}
+
 async function pipelines() {
   const refresh = () => load($('#pipeline-list'), async () => {
     const entries = collection(await request(api.pipelines));
@@ -367,6 +524,8 @@ async function run() {
     list($('#job-list'), result.jobs, 'job');
     if (result.submission_error) notice(result.submission_error);
     renderArtifacts(result.artifacts || []);
+    $('#diagnostic-from-run').href = `/diagnostics?new=1&run_id=${encodeURIComponent(id)}`;
+    $('#diagnostic-from-run').hidden = false;
     $('#analyze-run').disabled = ['pending', 'queued', 'in_progress'].includes(result.status);
     const finished = ['submission_failed', 'submission_unknown', 'completed', 'canceled', 'cancelled', 'failed', 'succeeded', 'partiallySucceeded'].includes(result.status) || Boolean(result.finished_at);
     const again = !finished && !stopped;
@@ -453,7 +612,7 @@ async function init() {
     document.querySelectorAll('main button').forEach((button) => { button.disabled = true; });
     return;
   }
-  const handlers = { login: auth, register: auth, dashboard, chats, chat, pipelines, pipeline, runs, run, job };
+  const handlers = { login: auth, register: auth, dashboard, chats, chat, diagnostics, pipelines, pipeline, runs, run, job };
   if (handlers[page]) await handlers[page]();
 }
 init().catch(report);

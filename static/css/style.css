@@ -13,3 +13,8 @@
 .composer .diagnosis-fields textarea { min-height: 3.5rem; border: 1px solid var(--line); padding: 8px 12px; background: white; }
 .message > .button { width: auto; margin-top: .5rem; }
 .composer #diagnosis-mode { width: auto; }
+
+.diagnostic-form { display: grid; gap: .55rem; margin-block: 1.25rem; max-width: 46rem; }
+.diagnostic-form .button { justify-self: start; margin-top: .35rem; }
+.diagnostic-actions { margin-top: 1.2rem; }
+#diagnostic-card dd, #diagnostic-checks .item-meta { white-space: pre-wrap; overflow-wrap: anywhere; }

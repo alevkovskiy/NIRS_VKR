@@ -10,6 +10,7 @@
 #include <QRegularExpression>
 #include <QSettings>
 #include <QTimer>
+#include <QUuid>
 
 namespace {
 QString fallback(int status)
@@ -86,6 +87,7 @@ void ApiClient::clearSession()
     if (wasAuthenticated) emit authenticatedChanged();
 }
 void ApiClient::logout() { clearSession(); }
+QString ApiClient::newRequestId() const { return QUuid::createUuid().toString().mid(1, 36); }
 void ApiClient::copyText(const QString &text) { QGuiApplication::clipboard()->setText(text); }
 
 void ApiClient::reject(int id, int status, const QString &message)

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Диагностика — TestOps Assistant</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script type="module" src="/static/js/app.js"></script>
+</head>
+<body data-page="diagnostics">
+<a class="skip-link" href="#main">К содержимому</a>
+<aside class="sidebar">
+  <a class="brand" href="/">TestOps Assistant</a>
+  <nav aria-label="Основная навигация">
+    <a href="/">Обзор</a>
+    <a href="/diagnostics" data-nav="diagnostics">Диагностика</a>
+    <a href="/chats">ИИ-ассистент</a>
+    <a href="/runs">Прогоны CI</a>
+  </nav>
+  <div class="sidebar-bottom">
+    <button class="button quiet" id="logout" type="button">Выйти из аккаунта</button>
+    <a id="signin" href="/auth/">Войти в аккаунт</a>
+  </div>
+</aside>
+<div class="workspace">
+<main id="main">
+  <div class="page-heading"><h1 id="page-title">Диагностические сессии</h1></div>
+  <div id="notice" class="notice" role="status" hidden></div>
+  <div id="diagnostic-overview" hidden>
+    <section class="panel">
+      <details id="diagnostic-create">
+        <summary>Описать сбой</summary>
+        <form id="diagnostic-form" class="diagnostic-form">
+          <label for="diag-title">Краткое название сбоя</label>
+          <input id="diag-title" name="title" maxlength="120" required>
+          <label for="diag-bench">Стенд</label>
+          <input id="diag-bench" name="bench" maxlength="120">
+          <label for="diag-environment">Устройство и версия сборки</label>
+          <input id="diag-environment" name="environment" maxlength="200">
+          <label for="diag-steps">Шаги воспроизведения</label>
+          <textarea id="diag-steps" name="steps" maxlength="600" rows="2"></textarea>
+          <label for="diag-expected">Ожидаемый результат</label>
+          <textarea id="diag-expected" name="expected" maxlength="400" rows="2"></textarea>
+          <label for="diag-observed">Фактический результат</label>
+          <textarea id="diag-observed" name="observed" maxlength="1000" rows="2"></textarea>
+          <label for="diag-file">Журнал в UTF-8, до 10 МБ</label>
+          <input id="diag-file" name="attachment" type="file" accept=".log,.txt,.md,.csv,.json,.xml,.yaml,.yml">
+          <label for="diag-run">Связанный прогон CI</label>
+          <select id="diag-run" name="run_id"><option value="">Без прогона</option></select>
+          <button class="button primary" type="submit">Сохранить сессию</button>
+        </form>
+      </details>
+    </section>
+    <section class="panel"><div id="diagnostic-list" class="items"></div></section>
+  </div>
+  <div id="diagnostic-detail" hidden>
+    <a class="back-link" href="/diagnostics">← Все сессии</a>
+    <section class="panel">
+      <dl id="diagnostic-card" class="details"></dl>
+      <div class="actions diagnostic-actions">
+        <button id="diagnostic-report" class="button primary" type="button">Подготовить черновик</button>
+        <a id="diagnostic-chat" class="button">История анализа</a>
+        <button id="diagnostic-status" class="button" type="button"></button>
+      </div>
+    </section>
+    <section id="diagnostic-log-panel" class="panel logs-panel" hidden>
+      <div class="section-head"><h2 id="diagnostic-log-name">Журнал</h2></div>
+      <pre id="diagnostic-log"></pre>
+    </section>
+    <section class="panel">
+      <div class="section-head"><h2>Проверки</h2></div>
+      <div class="actions">
+        <button id="import-stand" class="button" type="button" hidden>Импортировать снимок стенда</button>
+        <button id="repeat-ci" class="button" type="button" hidden>Повторить связанный прогон</button>
+        <a href="/pipelines" class="button">К пайплайнам CI</a>
+      </div>
+      <form id="ci-check-form" class="diagnostic-form">
+        <label for="check-run">Завершённый повторный прогон</label>
+        <select id="check-run" name="run_id" required></select>
+        <button class="button" type="submit">Записать результат CI</button>
+      </form>
+      <form id="manual-check-form" class="diagnostic-form">
+        <label for="check-name">Проверка</label>
+        <input id="check-name" name="check_name" maxlength="120" required>
+        <label for="check-outcome">Результат</label>
+        <select id="check-outcome" name="outcome">
+          <option value="passed">Успешно</option>
+          <option value="failed">Сбой</option>
+          <option value="inconclusive">Недостаточно данных</option>
+        </select>
+        <label for="check-note">Наблюдение</label>
+        <textarea id="check-note" name="note" maxlength="1000" rows="2"></textarea>
+        <button class="button" type="submit">Записать проверку</button>
+      </form>
+      <div id="diagnostic-checks" class="items" aria-live="polite"></div>
+    </section>
+  </div>
+</main>
+</div>
+</body>
+</html>
