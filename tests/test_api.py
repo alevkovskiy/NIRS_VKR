@@ -132,6 +132,58 @@ def test_chat_history_is_private_and_failed_generation_is_atomic(client, session
     )
 
 
+def test_chat_accepts_log_and_preserves_filename_and_context(client, monkeypatch):
+    headers = account(client)
+    chat_id = client.post("/chats/new", headers=headers, json={}).json()["id"]
+    url = f"/api/chats/{chat_id}/messages"
+    prompts = []
+
+    def generate(_self, messages):
+        prompts.append(messages)
+        return "**Сборка успешна**"
+
+    monkeypatch.setattr(TestModel, "generate", generate)
+    response = client.post(
+        url,
+        headers=headers,
+        json={
+            "attachment": {
+                "name": "build.log",
+                "text": "start\n"
+                + "ordinary line\n" * 75_000
+                + "27 passed\npassword=dummy-value\nWrote: nirs.rpm",
+            }
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["user_message"]["attachment_name"] == "build.log"
+    assert "27 passed" in prompts[0][-1]["content"]
+    assert "Wrote: nirs.rpm" in prompts[0][-1]["content"]
+    assert "dummy-value" not in prompts[0][-1]["content"]
+    assert len(prompts[0][-1]["content"]) < 4000
+    history = client.get(f"/api/chats/{chat_id}", headers=headers).json()["messages"]
+    assert history[0]["attachment_name"] == "build.log"
+    assert "attachment_excerpt" not in history[0]
+    assert client.post(url, headers=headers, json={"content": "Какой итог?"}).is_success
+    assert "27 passed" in prompts[1][0]["content"]
+
+
+def test_chat_reports_message_length_and_rejects_binary_attachment(client):
+    headers = account(client)
+    chat_id = client.post("/chats/new", headers=headers, json={}).json()["id"]
+    url = f"/api/chats/{chat_id}/messages"
+    oversized = client.post(url, headers=headers, json={"content": "а" * 6001})
+    assert oversized.status_code == 422
+    assert "Сообщение слишком большое" in oversized.json()["detail"][0]["msg"]
+    binary = client.post(
+        url,
+        headers=headers,
+        json={"attachment": {"name": "build.log", "text": "binary\x00data"}},
+    )
+    assert binary.status_code == 422
+    assert client.get(f"/api/chats/{chat_id}", headers=headers).json()["messages"] == []
+
+
 class FakeGitHub:
     calls = 0
 

@@ -107,7 +107,20 @@ function query(values) {
 }
 function renderMessage(message) {
   const user = message.role === 'user'; const block = el('article', `message${user ? ' user' : ''}`);
-  block.append(el('div', 'message-label', user ? 'Вы' : 'Ассистент'), el('div', 'message-body', message.content ?? ''));
+  const body = el('div', 'message-body');
+  if (message.attachment_name) body.append(el('div', 'message-attachment', message.attachment_name));
+  const content = String(message.content ?? '');
+  if (user) body.append(document.createTextNode(content));
+  else {
+    let start = 0;
+    for (const match of content.matchAll(/(`{3,})[\s\S]*?\1|`[^`\n]+`|\*\*([^*\n]+)\*\*/g)) {
+      body.append(document.createTextNode(content.slice(start, match.index)));
+      body.append(match[2] ? el('strong', '', match[2]) : document.createTextNode(match[0]));
+      start = match.index + match[0].length;
+    }
+    body.append(document.createTextNode(content.slice(start)));
+  }
+  block.append(el('div', 'message-label', user ? 'Вы' : 'Ассистент'), body);
   return block;
 }
 async function auth() {
@@ -151,7 +164,54 @@ async function chats() {
 }
 async function chat() {
   const id = routeId(); const messages = $('#messages'); const form = $('#message-form');
-  const button = form.querySelector('button'); const input = $('#message');
+  const button = form.querySelector('button[type="submit"]'); const input = $('#message');
+  const picker = $('#chat-file'); const attachButton = $('#attach-file');
+  const removeButton = $('#remove-attachment'); const attachmentInfo = $('#attachment-info');
+  const attachmentHint = attachmentInfo.textContent;
+  const errorText = $('#message-error'); const count = $('#message-count');
+  const maxMessage = 6000;
+  let attachment = null;
+  let readingFile = false;
+  function checkLength() {
+    const length = Array.from(input.value.trim()).length;
+    count.textContent = `${length.toLocaleString('ru-RU')} / 6 000`;
+    const tooLong = length > maxMessage;
+    input.setAttribute('aria-invalid', String(tooLong));
+    errorText.hidden = !tooLong;
+    errorText.textContent = tooLong ? 'Сообщение слишком большое. Максимум 6 000 символов.' : '';
+    return !tooLong;
+  }
+  function clearAttachment() {
+    attachment = null;
+    picker.value = '';
+    removeButton.hidden = true;
+    attachmentInfo.textContent = attachmentHint;
+  }
+  input.addEventListener('input', checkLength);
+  attachButton.addEventListener('click', () => picker.click());
+  removeButton.addEventListener('click', clearAttachment);
+  picker.addEventListener('change', async () => {
+    const file = picker.files[0];
+    if (!file) return;
+    clearNotice();
+    clearAttachment();
+    readingFile = true;
+    attachButton.disabled = true;
+    try {
+      if (!/\.(log|txt|md|csv|json|xml|ya?ml)$/i.test(file.name)) {
+        throw new Error('Выберите лог или текстовый файл поддерживаемого формата.');
+      }
+      if (file.size > 10 * 1024 * 1024) throw new Error('Файл слишком большой. Максимум 10 МБ.');
+      let text;
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer()); }
+      catch { throw new Error('Не удалось прочитать файл. Выберите текст в UTF-8.'); }
+      if (!text.trim() || text.includes('\0')) throw new Error('Файл должен содержать непустой текст.');
+      attachment = { name: file.name, text };
+      attachmentInfo.textContent = file.name;
+      removeButton.hidden = false;
+    } catch (error) { report(error); }
+    finally { readingFile = false; attachButton.disabled = false; }
+  });
   button.disabled = true; input.disabled = true;
   let ready = false;
   await load(messages, async () => {
@@ -160,21 +220,25 @@ async function chat() {
     title(result.title || `Диалог #${id}`);
     if (result.messages.length) messages.replaceChildren(...result.messages.map(renderMessage));
     else empty(messages, 'С чего начнём?', 'Задайте вопрос ассистенту в поле ниже.');
-    ready = true; button.disabled = false; input.disabled = false; messages.scrollTop = messages.scrollHeight;
+    ready = true; button.disabled = false; input.disabled = false; attachButton.disabled = false;
+    messages.scrollTop = messages.scrollHeight;
   });
   form.addEventListener('submit', (event) => {
     event.preventDefault(); const content = input.value.trim();
-    if (!ready || !content || button.disabled) return;
+    if (!ready || button.disabled || readingFile || !checkLength()) return;
+    if (!content && !attachment) { notice('Введите сообщение или прикрепите файл.'); return; }
     void busy(button, async () => {
-      clearNotice(); input.disabled = true; $('#send-state').textContent = 'Ассистент готовит ответ…';
+      clearNotice(); input.disabled = true; attachButton.disabled = true; removeButton.disabled = true;
+      $('#send-state').textContent = 'Ассистент готовит ответ…';
       try {
-        const result = await request(api.messages(id), { method: 'POST', body: { content } });
+        const result = await request(api.messages(id), { method: 'POST', body: { content, attachment } });
         if (typeof result?.assistant_message?.content !== 'string') throw new Error('Сервер не вернул assistant_message.content. Обновите чат перед повторной отправкой.');
         messages.querySelector('.empty')?.remove();
-        messages.append(renderMessage({ role: 'user', content }), renderMessage({ role: 'assistant', content: result.assistant_message.content }));
-        input.value = ''; messages.scrollTop = messages.scrollHeight;
+        messages.append(renderMessage(result.user_message ?? { role: 'user', content }), renderMessage(result.assistant_message));
+        input.value = ''; checkLength(); clearAttachment(); messages.scrollTop = messages.scrollHeight;
       } finally {
-        input.disabled = false; $('#send-state').textContent = 'Enter — отправить · Shift + Enter — новая строка'; input.focus();
+        input.disabled = false; attachButton.disabled = false; removeButton.disabled = false;
+        $('#send-state').textContent = 'Enter — отправить · Shift + Enter — новая строка'; input.focus();
       }
     }, 'Ожидание…');
   });

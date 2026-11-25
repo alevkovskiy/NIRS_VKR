@@ -42,6 +42,7 @@ class MessageRead(ReadModel):
     id: int
     role: str
     content: str
+    attachment_name: str | None = None
     created_at: datetime
 
 
@@ -56,6 +57,7 @@ class AssistantMessage(BaseModel):
 
 class MessageReply(BaseModel):
     assistant_message: AssistantMessage
+    user_message: MessageRead | None = None
 
 
 class JobRead(ReadModel):

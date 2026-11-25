@@ -97,6 +97,8 @@ class Message(Base):
     chat_id: Mapped[int] = mapped_column(ForeignKey("chats.id"), index=True)
     role: Mapped[str] = mapped_column(String(16), default=MessageRole.USER.value)
     content: Mapped[str] = mapped_column(Text)
+    attachment_name: Mapped[str | None] = mapped_column(String(255))
+    attachment_excerpt: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

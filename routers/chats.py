@@ -8,7 +8,7 @@ from config import BASE_DIR
 from crud.access import owned_chat, owned_run
 from models import Chat, Message
 from schemas.chats import ChatCreate, MessageCreate
-from schemas.responses import ChatRead, ChatSummary, MessageReply
+from schemas.responses import ChatRead, ChatSummary, MessageRead, MessageReply
 from security import CurrentUser, Db
 from services.chats import send_message
 from services.ollama import OllamaClient, get_ollama
@@ -62,7 +62,7 @@ def read_chat(chat_id: int, db: Db, user: CurrentUser):
     chat = owned_chat(db, chat_id, user.id)
     result = summary(chat)
     result["messages"] = [
-        {"id": m.id, "role": m.role, "content": m.content, "created_at": m.created_at}
+        MessageRead.model_validate(m)
         for m in db.scalars(
             select(Message).where(Message.chat_id == chat_id).order_by(Message.id)
         )
@@ -78,4 +78,4 @@ def message(
     user: CurrentUser,
     ollama: Annotated[OllamaClient, Depends(get_ollama)],
 ):
-    return send_message(db, chat_id, user.id, data.content, ollama)
+    return send_message(db, chat_id, user.id, data.content, ollama, data.attachment)
